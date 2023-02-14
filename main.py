@@ -3,6 +3,7 @@ import json
 from datetime import datetime, date, timedelta
 import time
 import sys
+from tqdm import tqdm
 
 
 USEFULL_OWNER_KEYS = {"type", "site_admin"}
@@ -59,47 +60,49 @@ def save_repos(start_date: date, end_date: date):
     url = lambda _page, _date: f"https://api.github.com/search/repositories?page={_page}" \
                               f"&per_page=100&q=stars:>5+created:{str(_date)}"
     start_t = 0
-    while tmp_date >= end_date:
-        for page in range(1, 11):
-            str_url = url(page, tmp_date)
-            response = requests.get(str_url, auth=auth)
-            # prev_t = start_t
-            # start_t = time.time()
-            if response.status_code != 200:
-                # print(f"Time = {start_t-prev_t}")
-                print(f"Problem: {str_url}; {response.status_code}, {response.reason}")
-                # time.sleep(5)
-                # if '2008-01-12' == str(tmp_date):
-                #     print('svsdvdvdfavdfv')
-                if response.reason == 'rate limit exceeded':
-                    print(f'Rate limit exceeded for request {str_url}')
-                    time.sleep((60 - datetime.today().minute + 1) * 60)
-                    print('Time to wake up')
-                else:
+    with tqdm(total=64, ncols=120) as pbar:
+        while tmp_date >= end_date:
+            for page in range(1, 11):
+                str_url = url(page, tmp_date)
+                response = requests.get(str_url, auth=auth)
+                # prev_t = start_t
+                # start_t = time.time()
+                if response.status_code != 200:
+                    # print(f"Time = {start_t-prev_t}")
+                    print(f"Problem: {str_url}; {response.status_code}, {response.reason}")
+                    # time.sleep(5)
+                    # if '2008-01-12' == str(tmp_date):
+                    #     print('svsdvdvdfavdfv')
+                    if response.reason == 'rate limit exceeded':
+                        print(f'Rate limit exceeded for request {str_url}')
+                        time.sleep((60 - datetime.today().minute + 1) * 60)
+                        print('Time to wake up')
+                    else:
+                        break
+                raw = response.json()
+                total_count = raw['total_count']
+                repos = raw['items']
+
+                if len(repos) == 0:
                     break
-            raw = response.json()
-            total_count = raw['total_count']
-            repos = raw['items']
 
-            if len(repos) == 0:
-                break
+                for repo in repos:
+                    repo_id = repo['id']
+                    try:
+                        with open(f"data_2015/{repo_id}.json", 'w', encoding='utf-8') as f:
+                            json.dump(get_usefull_dict(repo), f, ensure_ascii=False, indent=4)
+                    except Exception as e:
+                        print(f"id={repo_id}, url={repo['url']}", e)
 
-            for repo in repos:
-                repo_id = repo['id']
-                try:
-                    with open(f"data/{repo_id}.json", 'w', encoding='utf-8') as f:
-                        json.dump(get_usefull_dict(repo), f, ensure_ascii=False, indent=4)
-                except Exception as e:
-                    print(f"id={repo_id}, url={repo['url']}", e)
-
-            # if total_count % 100 + 1 <= page:
-            #     break
-
-        tmp_date = tmp_date - DAY_INCREMENT
+                # if total_count % 100 + 1 <= page:
+                #     break
+            pbar.update(1)
+            pbar.set_description(f"Date: {str(tmp_date)}")
+            tmp_date = tmp_date - DAY_INCREMENT
 
 
 if __name__ == "__main__":
-    start = date(2015, 1, 1)
-    end = date(2010, 1, 1)
+    start = date(2015, 3, 5)
+    end = date(2015, 1, 1)
 
     save_repos(start, end)
